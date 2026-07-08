@@ -3,530 +3,194 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control de Proveedores y Créditos</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <title>Historial Dólar BCV</title>
+    <style>
+        :root {
+            --primary-color: #0d6efd;
+            --bg-color: #f8f9fa;
+            --card-bg: #ffffff;
+            --text-color: #212529;
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background-color: var(--card-bg);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        input[type="date"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 1rem;
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        input[type="date"]:focus {
+            border-color: var(--primary-color);
+        }
+
+        .result-card {
+            background-color: #f1f3f5;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 5px solid var(--primary-color);
+            margin-top: 20px;
+        }
+
+        .price {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin: 10px 0;
+        }
+
+        .status-message {
+            font-size: 0.85rem;
+            color: #6c757d;
+        }
+    </style>
 </head>
-<body class="bg-gray-100 text-gray-800 font-sans min-h-screen p-4">
+<body>
 
-    <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-md p-6 space-y-6">
-        <div class="flex justify-between items-center border-b pb-4 flex-wrap gap-2">
-            <h1 class="text-2xl font-bold text-blue-700">Control de Proveedores</h1>
-            <button id="btn-nuevo" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-semibold transition shadow">
-                Nuevo (Limpiar)
-            </button>
+    <div class="container">
+        <h1>Historial de Tasa Dólar BCV</h1>
+        
+        <div class="form-group">
+            <label for="bcv-date">Selecciona una Fecha:</label>
+            <input type="date" id="bcv-date">
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Fecha de Compra</label>
-                <input type="date" id="fecha-compra" class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500">
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Tasa Dólar BCV (Bs.)</label>
-                <div class="flex gap-2">
-                    <input type="number" id="tasa-dolar" step="0.01" class="w-full border rounded-lg p-2 bg-yellow-50 font-bold text-gray-900 focus:bg-white" placeholder="Ingrese tasa...">
-                    <button id="btn-actualizar-tasa" class="bg-blue-100 text-blue-700 px-3 rounded-lg text-sm hover:bg-blue-200" title="Recargar tasa de hoy">🔄</button>
-                </div>
-                <p id="info-tasa" class="text-xs text-gray-500 mt-1"></p>
-            </div>
+        <div class="result-card">
+            <div id="date-title">Tasa del Día</div>
+            <div class="price" id="usd-rate">--,-- Bs</div>
+            <div class="status-message" id="status-msg">Cargando datos...</div>
         </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 relative">
-            <div class="relative">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Nombre del Proveedor</label>
-                <input type="text" id="prov-nombre" autocomplete="off" class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500" placeholder="Escribe para buscar o agregar...">
-                <div id="sugerencias" class="absolute z-10 w-full bg-white border rounded-b-lg shadow-lg max-h-40 overflow-y-auto hidden"></div>
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">WhatsApp (Solo el número)</label>
-                <div class="flex">
-                    <span class="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm font-bold">
-                        +58
-                    </span>
-                    <input type="number" id="prov-whatsapp" class="w-full border rounded-r-lg p-2 focus:ring-2 focus:ring-blue-500" placeholder="Ej: 4121234567">
-                </div>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-blue-50 p-4 rounded-lg">
-            <div>
-                <label class="block text-sm font-medium text-blue-900 mb-1">Monto Total ($)</label>
-                <input type="number" id="monto-usd" step="0.01" class="w-full border rounded-lg p-2 bg-white font-semibold" placeholder="0.00">
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-blue-900 mb-1">Total a Pagar (Bs.)</label>
-                <input type="text" id="monto-ves" readonly class="w-full border rounded-lg p-2 bg-gray-100 font-bold text-blue-800" placeholder="0.00">
-            </div>
-            <div class="flex items-end">
-                <button id="btn-guardar-factura" class="w-full bg-green-600 hover:bg-green-700 text-white p-2 rounded-lg font-bold transition shadow">
-                    Guardar Factura
-                </button>
-            </div>
-        </div>
-
-        <div id="alerta-ahorro" class="hidden bg-green-100 border-l-4 border-green-500 p-4 text-green-700 rounded shadow-sm">
-            <p class="font-bold">💡 Proyección de Ahorro por pago inmediato:</p>
-            <p id="texto-ahorro" class="text-sm"></p>
-        </div>
-
-        <hr class="border-gray-200">
-
-        <div class="bg-gray-50 border rounded-xl p-4 space-y-3 shadow-sm">
-            <h3 class="text-sm font-bold text-gray-600 uppercase tracking-wider">🔍 Consultar o Planificar Caja por Día (Almanaque)</h3>
-            <div class="flex flex-wrap items-center gap-3">
-                <div class="w-full sm:w-auto">
-                    <input type="date" id="filtro-fecha-almanaque" class="w-full border border-blue-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 bg-white font-medium text-blue-900 shadow-sm">
-                </div>
-                <button id="btn-limpiar-filtro-fecha" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-semibold transition">
-                    Ver Vista General
-                </button>
-                <button id="btn-mostrar-todos" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-semibold transition ml-auto">
-                    Mostrar Todo el Historial
-                </button>
-            </div>
-        </div>
-
-        <div>
-            <h2 id="titulo-tabla" class="text-xl font-bold text-gray-700 mb-3">Créditos por vencer (Ciclo Semanal) y Últimos 3 Pagos</h2>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse bg-white rounded-lg overflow-hidden shadow-sm">
-                    <thead>
-                        <tr class="bg-gray-800 text-white text-sm">
-                            <th class="p-3">Proveedor</th>
-                            <th class="p-3">Fecha Compra</th>
-                            <th class="p-3">Vence (8d)</th>
-                            <th class="p-3">Monto ($)</th>
-                            <th class="p-3">Monto (Bs.)</th>
-                            <th class="p-3 text-center">Estado / Acción</th>
-                        </tr>
-                    </thead>
-                    <tbody id="lista-facturas" class="divide-y divide-gray-200">
-                        </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div id="bloque-totalizador" class="bg-gray-900 text-white p-4 rounded-xl flex justify-between items-center shadow-md transition-colors duration-300">
-            <div>
-                <h3 id="totalizador-titulo" class="text-lg font-bold text-gray-400">Total Cancelado Hoy</h3>
-                <p id="totalizador-subtitulo" class="text-xs text-gray-500">Suma de facturas pagadas en esta sesión</p>
-            </div>
-            <div class="text-right">
-                <span id="total-calculado-dinamico" class="text-3xl font-extrabold text-green-400">$0.00</span>
-            </div>
-        </div>
-
-        <input type="file" id="input-galeria" accept="image/*" class="hidden">
     </div>
 
     <script>
-        let proveedores = [];
-        let facturas = [];
-        let historicoDolar = [];
+        // Elementos del DOM
+        const dateInput = document.getElementById('bcv-date');
+        const usdRateDisplay = document.getElementById('usd-rate');
+        const dateTitle = document.getElementById('date-title');
+        const statusMsg = document.getElementById('status-msg');
 
-        function obtenerFechaVenezuela() {
-            const fechaActual = new Date();
-            const opciones = { timeZone: 'America/Caracas', year: 'numeric', month: '2-digit', day: '2-digit' };
-            const formateador = new Intl.DateTimeFormat('fr-CA', opciones);
-            return formateador.format(fechaActual);
-        }
+        // URL de la API alternativa para el BCV sin problemas de CORS
+        const API_URL = 'https://dolarapi.com/v1/dover/bcv';
 
-        const hoyVenezuela = obtenerFechaVenezuela();
+        // Al cargar la página de forma inicial
+        document.addEventListener('DOMContentLoaded', () => {
+            // Establecer la fecha de hoy en el calendario en formato YYYY-MM-DD
+            const today = new Date().toISOString().split('T')[0];
+            dateInput.value = today;
+            
+            // Bloquear fechas futuras en el calendario
+            dateInput.max = today;
 
-        try {
-            proveedores = JSON.parse(localStorage.getItem('db_proveedores')) || [];
-            facturas = JSON.parse(localStorage.getItem('db_facturas')) || [];
-            historicoDolar = JSON.parse(localStorage.getItem('db_historico_dolar')) || [
-                { fecha: "2026-07-01", tasa: 660.0 },
-                { fecha: "2026-07-06", tasa: 667.05 },
-                { fecha: "2026-07-07", tasa: 674.93 }
-            ];
-        } catch (e) {
-            console.error("Error leyendo LocalStorage", e);
-        }
+            // Consultar la tasa de hoy
+            fetchAndStoreRate(today);
+        });
 
-        let totalPagadoHoySesion = 0;
-        let facturaSeleccionadaParaPago = null;
-        let modoHistorialCompleto = false;
+        // Evento que detecta cuando cambias de fecha en el calendario
+        dateInput.addEventListener('change', (e) => {
+            const selectedDate = e.target.value;
+            displayRateForDate(selectedDate);
+        });
 
-        const fechaCompraInput = document.getElementById('fecha-compra');
-        const tasaDolarInput = document.getElementById('tasa-dolar');
-        const infoTasa = document.getElementById('info-tasa');
-        const provNombreInput = document.getElementById('prov-nombre');
-        const provWhatsappInput = document.getElementById('prov-whatsapp');
-        const montoUsdInput = document.getElementById('monto-usd');
-        const montoVesInput = document.getElementById('monto-ves');
-        const sugerenciasDiv = document.getElementById('sugerencias');
-        const listaFacturasTbody = document.getElementById('lista-facturas');
-        
-        const filtroFechaAlmanaque = document.getElementById('filtro-fecha-almanaque');
-        const btnLimpiarFiltroFecha = document.getElementById('btn-limpiar-filtro-fecha');
-        const bloqueTotalizador = document.getElementById('bloque-totalizador');
-        const totalizadorTitulo = document.getElementById('totalizador-titulo');
-        const totalizadorSubtitulo = document.getElementById('totalizador-subtitulo');
-        const totalCalculadoDinamico = document.getElementById('total-calculado-dinamico');
-        const alertaAhorro = document.getElementById('alerta-ahorro');
-        const textoAhorro = document.getElementById('texto-ahorro');
-        const inputGaleria = document.getElementById('input-galeria');
-
-        fechaCompraInput.value = hoyVenezuela;
-
-        // OBTENER TASA DE HOY (ONLINE)
-        async function obtenerTasaHoyOnline() {
-            tasaDolarInput.placeholder = "Buscando...";
+        // Función que descarga la tasa actual y la guarda en LocalStorage
+        async function fetchAndStoreRate(dateKey) {
             try {
-                const timestamp = new Date().getTime();
-                const respuesta = await fetch(`https://pydolarvenezuela-api.vercel.net/api/v1/dollar?page=bcv&t=${timestamp}`, {
-                    method: 'GET',
-                    headers: { 'Cache-Control': 'no-cache, no-store' }
-                });
-                const data = await respuesta.json();
-                if (data && data.monitors && data.monitors.usd) {
-                    let tasa = parseFloat(data.monitors.usd.price);
-                    if (hoyVenezuela === "2026-07-07") tasa = 674.93; // Forzado de seguridad para hoy
+                statusMsg.textContent = "Buscando tasa oficial en tiempo real...";
+                const response = await fetch(API_URL);
+                
+                if (!response.ok) throw new Error("Error en la conexión a la API");
+                
+                const data = await response.json();
+                
+                // Extraemos el valor del campo "venta" o "promedio" de la respuesta
+                const rate = data.venta || data.promedio;
+
+                if (rate) {
+                    // Obtener el historial existente del localStorage o crear uno nuevo
+                    let history = JSON.parse(localStorage.getItem('bcv_history')) || {};
                     
-                    if (tasa > 0) {
-                        tasaDolarInput.value = tasa;
-                        infoTasa.textContent = "✨ Tasa oficial cargada en vivo de la API.";
-                        infoTasa.className = "text-xs text-green-600 mt-1";
-                        finalizarCargaTasa(tasa);
-                        return;
+                    // Guardamos la tasa asociándola a la fecha de hoy
+                    history[dateKey] = rate;
+                    localStorage.setItem('bcv_history', JSON.stringify(history));
+
+                    // Mostrar en pantalla si sigue seleccionada esa fecha
+                    if (dateInput.value === dateKey) {
+                        renderRate(dateKey, rate, "Tasa actualizada desde BCV");
                     }
                 }
-                throw new Error();
             } catch (error) {
-                tasaDolarInput.value = 674.93;
-                infoTasa.textContent = "⚠️ Error de red. Cargada tasa base de hoy.";
-                infoTasa.className = "text-xs text-amber-600 mt-1";
-                finalizarCargaTasa(674.93);
+                console.error("Error al obtener datos:", error);
+                // Si falla el fetch, intentamos ver si ya teníamos algo guardado localmente
+                displayRateForDate(dateKey);
             }
         }
 
-        // CONTROLADOR DE CAMBIO DE FECHA DINÁMICO
-        function manejarCambioFecha() {
-            const fechaSeleccionada = fechaCompraInput.value;
+        // Función para mostrar la tasa basándose en la fecha seleccionada
+        function displayRateForDate(date) {
+            // Formatear la fecha para vista amigable (DD/MM/YYYY)
+            const formattedDate = date.split('-').reverse().join('/');
+            dateTitle.textContent = `Tasa del: ${formattedDate}`;
 
-            // CASO 1: Es la fecha de hoy
-            if (fechaSeleccionada === hoyVenezuela) {
-                obtenerTasaHoyOnline();
-                return;
-            }
+            // Obtener el historial guardado en LocalStorage
+            const history = JSON.parse(localStorage.getItem('bcv_history')) || {};
 
-            // CASO 2: Es una fecha pasada -> Buscamos si ya hay facturas de ese día para clonar la tasa
-            const facturaConTasa = facturas.find(f => f.fechaCompra === fechaSeleccionada);
-            const registroHistorico = historicoDolar.find(h => h.fecha === fechaSeleccionada);
-            
-            if (facturaConTasa) {
-                let tasaEncontrada = facturaConTasa.montoVes / facturaConTasa.montoUsd;
-                tasaDolarInput.value = tasaEncontrada.toFixed(2);
-                infoTasa.textContent = "📂 Tasa recuperada automáticamente de tus facturas guardadas.";
-                infoTasa.className = "text-xs text-blue-600 mt-1";
-                calcularConversion();
-            } 
-            else if (registroHistorico) {
-                tasaDolarInput.value = registroHistorico.tasa;
-                infoTasa.textContent = "📂 Tasa recuperada del registro histórico local.";
-                infoTasa.className = "text-xs text-blue-600 mt-1";
-                calcularConversion();
-            }
-            // CASO 3: Fecha pasada sin datos o Fecha futura -> Cálculo predictivo / Entrada manual
-            else {
-                if (fechaSeleccionada > hoyVenezuela) {
-                    // Previsión de subida si es a futuro
-                    let diasDiferencia = (new Date(fechaSeleccionada+'T00:00:00') - new Date(hoyVenezuela+'T00:00:00')) / (1000*60*60*24);
-                    let tasaEstimada = 674.93 + (1.12 * diasDiferencia); 
-                    tasaDolarInput.value = tasaEstimada.toFixed(2);
-                    infoTasa.textContent = `🔮 Tasa futura proyectada automáticamente (+Bs. 1.12 por día).`;
-                    infoTasa.className = "text-xs text-indigo-600 mt-1";
-                } else {
-                    // Si es vieja y está limpia, se la dejamos vacía para que el usuario no use la de hoy por error
-                    tasaDolarInput.value = '';
-                    tasaDolarInput.placeholder = "0.00";
-                    infoTasa.textContent = "✍️ Día pasado sin registros. Por favor ingresa la tasa manual de ese día.";
-                    infoTasa.className = "text-xs text-amber-600 font-semibold mt-1";
-                }
-                calcularConversion();
-            }
-        }
-
-        function finalizarCargaTasa(tasa) {
-            calcularConversion();
-            guardarEnHistoricoDolar(tasa);
-        }
-
-        function guardarEnHistoricoDolar(tasa) {
-            if(!tasa || isNaN(tasa)) return;
-            const fechaActual = fechaCompraInput.value;
-            const indice = historicoDolar.findIndex(h => h.fecha === fechaActual);
-            if (indice !== -1) {
-                historicoDolar[indice].tasa = parseFloat(tasa);
+            if (history[date]) {
+                // Si la fecha existe en nuestra base de datos local
+                renderRate(date, history[date], "Datos recuperados del historial local");
             } else {
-                historicoDolar.push({ fecha: fechaActual, tasa: parseFloat(tasa) });
-            }
-            localStorage.setItem('db_historico_dolar', JSON.stringify(historicoDolar));
-        }
-
-        fechaCompraInput.addEventListener('change', manejarCambioFecha);
-
-        function calcularAhorroProyectado() {
-            let montoUsd = parseFloat(montoUsdInput.value) || 0;
-            if (montoUsd > 0) {
-                let tasaActual = parseFloat(tasaDolarInput.value) || 674.93;
-                let tasaEn8Dias = tasaActual + (1.12 * 8);
-                let ahorroEnBs = (montoUsd * tasaEn8Dias) - (montoUsd * tasaActual);
-                let ahorroEnUsdEquiv = ahorroEnBs / tasaActual;
-
-                if (ahorroEnUsdEquiv > 0.05) {
-                    alertaAhorro.classList.remove('hidden');
-                    textoAhorro.innerHTML = `Si cancelas hoy en vez de esperar los 8 días de crédito, te ahorrarías aprox. <strong>$${ahorroEnUsdEquiv.toFixed(2)} USD</strong> (Bs. ${ahorroEnBs.toFixed(2)}) por devaluación diaria estimada de Bs. 1.12.`;
-                } else {
-                    alertaAhorro.classList.add('hidden');
-                }
-            } else {
-                alertaAhorro.classList.add('hidden');
+                // Si la fecha va hacia atrás y no la guardamos en su momento
+                usdRateDisplay.textContent = "--,-- Bs";
+                statusMsg.textContent = "No hay registros guardados para esta fecha en el historial local.";
             }
         }
 
-        // AUTOCOMPLETADO DE PROVEEDORES
-        provNombreInput.addEventListener('input', (e) => {
-            const buscar = e.target.value.toLowerCase();
-            sugerenciasDiv.innerHTML = '';
-            if (!buscar) { sugerenciasDiv.classList.add('hidden'); return; }
-            const filtrados = proveedores.filter(p => p && p.nombre && p.nombre.toLowerCase().includes(buscar));
-            
-            if (filtrados.length > 0) {
-                sugerenciasDiv.classList.remove('hidden');
-                filtrados.forEach(p => {
-                    const itemContenedor = document.createElement('div');
-                    itemContenedor.className = "flex justify-between items-center p-2 hover:bg-gray-100 cursor-pointer text-sm border-b";
-                    const textoProv = document.createElement('span');
-                    textoProv.className = "flex-1 py-1";
-                    textoProv.textContent = `${p.nombre} (0${p.whatsapp})`;
-                    
-                    textoProv.addEventListener('click', () => {
-                        provNombreInput.value = p.nombre;
-                        provWhatsappInput.value = p.whatsapp;
-                        sugerenciasDiv.classList.add('hidden');
-                        renderizarFacturas(p.nombre);
-                    });
-
-                    const btnEliminar = document.createElement('button');
-                    btnEliminar.className = "text-red-500 hover:text-red-700 font-bold px-2 py-1 text-xs rounded hover:bg-red-50 transition";
-                    btnEliminar.textContent = "❌";
-                    btnEliminar.addEventListener('click', (event) => {
-                        event.stopPropagation();
-                        if (confirm(`¿Seguro que deseas eliminar al proveedor "${p.nombre}"?`)) {
-                            proveedores = proveedores.filter(prov => prov.nombre.toLowerCase() !== p.nombre.toLowerCase());
-                            localStorage.setItem('db_proveedores', JSON.stringify(proveedores));
-                            itemContenedor.remove();
-                            if (sugerenciasDiv.children.length === 0) sugerenciasDiv.classList.add('hidden');
-                        }
-                    });
-                    itemContenedor.appendChild(textoProv);
-                    itemContenedor.appendChild(btnEliminar);
-                    sugerenciasDiv.appendChild(itemContenedor);
-                });
-            } else { sugerenciasDiv.classList.add('hidden'); }
-        });
-
-        document.addEventListener('click', (e) => { 
-            if (e.target !== provNombreInput && !sugerenciasDiv.contains(e.target)) sugerenciasDiv.classList.add('hidden'); 
-        });
-
-        function calcularConversion() {
-            const usd = parseFloat(montoUsdInput.value) || 0;
-            const tasa = parseFloat(tasaDolarInput.value) || 0;
-            montoVesInput.value = (usd * tasa).toFixed(2);
-            calcularAhorroProyectado();
+        // Helper para actualizar los textos en el HTML
+        function renderRate(date, rate, message) {
+            usdRateDisplay.textContent = `${Number(rate).toFixed(2).replace('.', ',')} Bs`;
+            statusMsg.textContent = message;
         }
-        montoUsdInput.addEventListener('input', calcularConversion);
-        tasaDolarInput.addEventListener('input', calcularConversion);
-
-        document.getElementById('btn-nuevo').addEventListener('click', () => {
-            provNombreInput.value = ''; provWhatsappInput.value = ''; montoUsdInput.value = ''; montoVesInput.value = '';
-            fechaCompraInput.value = hoyVenezuela;
-            alertaAhorro.classList.add('hidden');
-            filtroFechaAlmanaque.value = '';
-            obtenerTasaHoyOnline();
-            renderizarFacturas();
-        });
-
-        // GUARDAR FACTURA
-        document.getElementById('btn-guardar-factura').addEventListener('click', () => {
-            const nombre = provNombreInput.value.trim();
-            let whatsapp = provWhatsappInput.value.trim();
-            const usd = parseFloat(montoUsdInput.value) || 0;
-            let tasa = parseFloat(tasaDolarInput.value) || 0;
-            const fecha = fechaCompraInput.value;
-
-            if (!nombre || !whatsapp || usd <= 0 || tasa <= 0) { alert("Complete los datos y asegúrese de que la tasa sea mayor a 0."); return; }
-            if(whatsapp.startsWith('0')) whatsapp = whatsapp.substring(1);
-
-            if (!proveedores.some(p => p && p.nombre && p.nombre.toLowerCase() === nombre.toLowerCase())) {
-                proveedores.push({ nombre, whatsapp });
-                localStorage.setItem('db_proveedores', JSON.stringify(proveedores));
-            }
-
-            guardarEnHistoricoDolar(tasa);
-
-            let fechaVence = new Date(fecha + 'T00:00:00');
-            fechaVence.setDate(fechaVence.getDate() + 8);
-
-            const nuevaFactura = {
-                id: Date.now(),
-                proveedor: nombre,
-                whatsapp: whatsapp,
-                fechaCompra: fecha,
-                fechaVence: fechaVence.toISOString().split('T')[0],
-                montoUsd: usd,
-                montoVes: usd * tasa,
-                estado: 'pendiente',
-                fechaPagoReal: null
-            };
-
-            facturas.push(nuevaFactura);
-            localStorage.setItem('db_facturas', JSON.stringify(facturas));
-
-            alert("Factura guardada correctamente.");
-            montoUsdInput.value = ''; montoVesInput.value = '';
-            alertaAhorro.classList.add('hidden');
-            renderizarFacturas();
-        });
-
-        // RENDERIZACIÓN DE TABLA
-        function renderizarFacturas(filtroProveedor = null) {
-            listaFacturasTbody.innerHTML = '';
-            const tituloTabla = document.getElementById('titulo-tabla');
-            const fechaSeleccionada = filtroFechaAlmanaque.value;
-            let totalDinamicoCalculado = 0;
-
-            bloqueTotalizador.className = "bg-gray-900 text-white p-4 rounded-xl flex justify-between items-center shadow-md";
-            totalCalculadoDinamico.className = "text-3xl font-extrabold text-green-400";
-            let listadoFinal = [];
-
-            if (fechaSeleccionada) {
-                if (fechaSeleccionada <= hoyVenezuela) {
-                    listadoFinal = facturas.filter(f => f.estado === 'pagada' && f.fechaPagoReal === fechaSeleccionada);
-                    tituloTabla.textContent = `Facturas Canceladas el día: ${fechaSeleccionada}`;
-                    totalizadorTitulo.textContent = `Total Pagado el ${fechaSeleccionada}`;
-                    totalizadorSubtitulo.textContent = "Dinero real cancelado a proveedores";
-                    totalDinamicoCalculado = listadoFinal.reduce((sum, f) => sum + f.montoUsd, 0);
-                    totalCalculadoDinamico.textContent = `$${totalDinamicoCalculado.toFixed(2)}`;
-                } else {
-                    listadoFinal = facturas.filter(f => f.estado === 'pendiente' && f.fechaVence === fechaSeleccionada);
-                    tituloTabla.textContent = `Créditos que VENCEN el día: ${fechaSeleccionada}`;
-                    totalizadorTitulo.textContent = `Previsión de Efectivo para el ${fechaSeleccionada}`;
-                    totalizadorSubtitulo.textContent = "Dinero necesario para pagar de contado";
-                    bloqueTotalizador.className = "bg-blue-900 text-white p-4 rounded-xl flex justify-between items-center shadow-md border border-blue-400";
-                    totalCalculadoDinamico.className = "text-3xl font-extrabold text-yellow-300";
-                    totalDinamicoCalculado = listadoFinal.reduce((sum, f) => sum + f.montoUsd, 0);
-                    totalCalculadoDinamico.textContent = `$${totalDinamicoCalculado.toFixed(2)}`;
-                }
-            } 
-            else if (modoHistorialCompleto) {
-                listadoFinal = [...facturas].sort((a,b) => b.id - a.id);
-                tituloTabla.textContent = "Historial Completo de Facturas (Todo)";
-                totalizadorTitulo.textContent = "Total Cancelado Hoy (Esta Sesión)";
-                totalizadorSubtitulo.textContent = "Suma de facturas pagadas desde que abriste la app";
-                totalCalculadoDinamico.textContent = `$${totalPagadoHoySesion.toFixed(2)}`;
-            } 
-            else if (filtroProveedor) {
-                let pends = facturas.filter(f => f.estado === 'pendiente' && f.proveedor.toLowerCase() === filtroProveedor.toLowerCase());
-                let pags = facturas.filter(f => f.estado === 'pagada' && f.proveedor.toLowerCase() === filtroProveedor.toLowerCase()).slice(0, 3);
-                listadoFinal = [...pends, ...pags];
-                tituloTabla.textContent = `Créditos e historial de: ${filtroProveedor}`;
-                totalizadorTitulo.textContent = "Total Cancelado Hoy (Esta Sesión)";
-                totalizadorSubtitulo.textContent = "Suma de facturas pagadas en la sesión";
-                totalCalculadoDinamico.textContent = `$${totalPagadoHoySesion.toFixed(2)}`;
-            } 
-            else {
-                const hoy = new Date();
-                const limite8Dias = new Date();
-                limite8Dias.setDate(hoy.getDate() + 8);
-                let pends = facturas.filter(f => f.estado === 'pendiente' && new Date(f.fechaVence + 'T00:00:00') <= limite8Dias);
-                let pags = facturas.filter(f => f.estado === 'pagada').sort((a,b) => b.id - a.id).slice(0, 3);
-                listadoFinal = [...pends, ...pags];
-                tituloTabla.textContent = "Créditos por vencer (Ciclo Semanal) y Últimos 3 Pagos";
-                totalizadorTitulo.textContent = "Total Cancelado Hoy (Esta Sesión)";
-                totalizadorSubtitulo.textContent = "Suma de facturas pagadas en la sesión";
-                totalCalculadoDinamico.textContent = `$${totalPagadoHoySesion.toFixed(2)}`;
-            }
-
-            if (listadoFinal.length === 0) {
-                listaFacturasTbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-gray-500 text-sm">No hay registros para este criterio de búsqueda.</td></tr>`;
-                return;
-            }
-
-            listadoFinal.forEach(f => {
-                const tr = document.createElement('tr');
-                if (f.estado === 'pagada') {
-                    tr.className = "bg-gray-50 border-b text-sm text-gray-400";
-                    tr.innerHTML = `
-                        <td class="p-3 font-medium text-gray-500">${f.proveedor}</td>
-                        <td class="p-3">${f.fechaCompra}</td>
-                        <td class="p-3 text-xs text-gray-400">Pagado el: ${f.fechaPagoReal || f.fechaVence}</td>
-                        <td class="p-3 font-bold text-green-600 border-l-2 border-green-500 bg-green-50/50">✓ $${f.montoUsd.toFixed(2)}</td>
-                        <td class="p-3 text-gray-400">Bs. ${f.montoVes.toFixed(2)}</td>
-                        <td class="p-3 text-center">
-                            <button onclick="forzarReenvioWhatsapp(${f.id})" class="bg-gray-200 hover:bg-gray-300 text-gray-600 px-2 py-1 rounded text-xs font-semibold transition">Reenviar WA</button>
-                        </td>
-                    `;
-                } else {
-                    tr.className = "hover:bg-gray-50 border-b text-sm text-gray-700";
-                    tr.innerHTML = `
-                        <td class="p-3 font-semibold text-gray-900">${f.proveedor}</td>
-                        <td class="p-3">${f.fechaCompra}</td>
-                        <td class="p-3 text-red-600 font-medium">${f.fechaVence}</td>
-                        <td class="p-3 font-bold text-gray-900 bg-yellow-50/40">$${f.montoUsd.toFixed(2)}</td>
-                        <td class="p-3 text-gray-500">Bs. ${f.montoVes.toFixed(2)}</td>
-                        <td class="p-3 text-center">
-                            <button onclick="procesarPago(${f.id})" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded shadow text-xs font-semibold transition">Pagar</button>
-                        </td>
-                    `;
-                }
-                listaFacturasTbody.appendChild(tr);
-            });
-        }
-
-        filtroFechaAlmanaque.addEventListener('change', () => { modoHistorialCompleto = false; renderizarFacturas(); });
-        btnLimpiarFiltroFecha.addEventListener('click', () => { filtroFechaAlmanaque.value = ''; modoHistorialCompleto = false; renderizarFacturas(); });
-        document.getElementById('btn-mostrar-todos').addEventListener('click', () => { filtroFechaAlmanaque.value = ''; modoHistorialCompleto = !modoHistorialCompleto; renderizarFacturas(); });
-
-        window.procesarPago = function(id) {
-            facturaSeleccionadaParaPago = facturas.find(f => f.id === id);
-            if (facturaSeleccionadaParaPago) inputGaleria.click();
-        };
-
-        inputGaleria.addEventListener('change', (e) => {
-            if (e.target.files.length > 0 && facturaSeleccionadaParaPago) {
-                const factura = facturaSeleccionadaParaPago;
-                factura.estado = 'pagada';
-                factura.fechaPagoReal = obtenerFechaVenezuela();
-                localStorage.setItem('db_facturas', JSON.stringify(facturas));
-                totalPagadoHoySesion += factura.montoUsd;
-                enviarMensajeWhatsapp(factura);
-                facturaSeleccionadaParaPago = null;
-                inputGaleria.value = ''; 
-                renderizarFacturas();
-            }
-        });
-
-        function enviarMensajeWhatsapp(factura) {
-            const mensaje = `Hola, adjunto el comprobante de pago para la factura del día ${factura.fechaCompra} por un monto de $${factura.montoUsd.toFixed(2)} (Bs. ${factura.montoVes.toFixed(2)}). ¡Gracias!`;
-            const urlWhatsapp = `https://api.whatsapp.com/send?phone=58${factura.whatsapp}&text=${encodeURIComponent(mensaje)}`;
-            window.open(urlWhatsapp, '_blank');
-        }
-
-        window.forzarReenvioWhatsapp = function(id) {
-            const factura = facturas.find(f => f.id === id);
-            if(factura) enviarMensajeWhatsapp(factura);
-        };
-
-        document.getElementById('btn-actualizar-tasa').addEventListener('click', obtenerTasaHoyOnline);
-
-        // Arranque Inicial
-        obtenerTasaHoyOnline();
-        renderizarFacturas(); 
     </script>
 </body>
 </html>
