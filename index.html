@@ -85,6 +85,7 @@
         .status-message {
             font-size: 0.85rem;
             color: #6c757d;
+            margin-top: 5px;
         }
     </style>
 </head>
@@ -101,92 +102,111 @@
         <div class="result-card">
             <div id="date-title">Tasa del Día</div>
             <div class="price" id="usd-rate">--,-- Bs</div>
-            <div class="status-message" id="status-msg">Cargando datos...</div>
+            <div class="status-message" id="status-msg">Iniciando aplicación...</div>
         </div>
     </div>
 
     <script>
-        // Elementos del DOM
+        // Elementos de la interfaz (DOM)
         const dateInput = document.getElementById('bcv-date');
         const usdRateDisplay = document.getElementById('usd-rate');
         const dateTitle = document.getElementById('date-title');
         const statusMsg = document.getElementById('status-msg');
 
-        // URL de la API alternativa para el BCV sin problemas de CORS
-        const API_URL = 'https://dolarapi.com/v1/dover/bcv';
+        // URLs de las APIs (Estrategia de Respaldo)
+        const PRIMARY_API = 'https://dolarapi.com/v1/dolares/bcv'; 
+        const BACKUP_API = 'https://ve.fxratesapi.com/v1/rates/latest?base=USD';
 
-        // Al cargar la página de forma inicial
+        // Al iniciar la aplicación
         document.addEventListener('DOMContentLoaded', () => {
-            // Establecer la fecha de hoy en el calendario en formato YYYY-MM-DD
+            // Obtener la fecha local de hoy en formato YYYY-MM-DD
             const today = new Date().toISOString().split('T')[0];
             dateInput.value = today;
-            
-            // Bloquear fechas futuras en el calendario
-            dateInput.max = today;
+            dateInput.max = today; // Evita que se elijan fechas futuras
 
-            // Consultar la tasa de hoy
-            fetchAndStoreRate(today);
+            // Buscar la tasa del día de hoy
+            fetchRateWithFallback(today);
         });
 
-        // Evento que detecta cuando cambias de fecha en el calendario
+        // Detectar cambios en el calendario
         dateInput.addEventListener('change', (e) => {
             const selectedDate = e.target.value;
             displayRateForDate(selectedDate);
         });
 
-        // Función que descarga la tasa actual y la guarda en LocalStorage
-        async function fetchAndStoreRate(dateKey) {
+        // Lógica de consulta asíncrona con Plan A y Plan B
+        async function fetchRateWithFallback(dateKey) {
+            statusMsg.textContent = "Buscando tasa oficial (Intento 1)...";
+            
             try {
-                statusMsg.textContent = "Buscando tasa oficial en tiempo real...";
-                const response = await fetch(API_URL);
-                
-                if (!response.ok) throw new Error("Error en la conexión a la API");
+                // INTENTO 1: API Principal
+                const response = await fetch(PRIMARY_API);
+                if (!response.ok) throw new Error("API Principal no disponible");
                 
                 const data = await response.json();
+                // DolarApi entrega un campo llamado "promedio" para el BCV
+                const rate = data.promedio || data.venta;
                 
-                // Extraemos el valor del campo "venta" o "promedio" de la respuesta
-                const rate = data.venta || data.promedio;
+                if (!rate) throw new Error("Datos inválidos en API Principal");
+                
+                saveAndRender(dateKey, rate, "Tasa obtenida con éxito (API Principal)");
 
-                if (rate) {
-                    // Obtener el historial existente del localStorage o crear uno nuevo
-                    let history = JSON.parse(localStorage.getItem('bcv_history')) || {};
+            } catch (primaryError) {
+                console.warn("Fallo la API principal, intentando con el respaldo...", primaryError);
+                statusMsg.textContent = "API principal no responde. Conectando al respaldo...";
+
+                try {
+                    // INTENTO 2: API de Respaldo
+                    const response = await fetch(BACKUP_API);
+                    if (!response.ok) throw new Error("API de Respaldo no disponible");
                     
-                    // Guardamos la tasa asociándola a la fecha de hoy
-                    history[dateKey] = rate;
-                    localStorage.setItem('bcv_history', JSON.stringify(history));
+                    const data = await response.json();
+                    // fxratesapi devuelve las tasas de cambio en el objeto "rates"
+                    const rate = data.rates && data.rates.VES ? data.rates.VES : null;
 
-                    // Mostrar en pantalla si sigue seleccionada esa fecha
-                    if (dateInput.value === dateKey) {
-                        renderRate(dateKey, rate, "Tasa actualizada desde BCV");
-                    }
+                    if (!rate) throw new Error("Datos inválidos en API Respaldo");
+
+                    saveAndRender(dateKey, rate, "Tasa obtenida con éxito (Servidor Respaldo)");
+
+                } catch (backupError) {
+                    console.error("Ambas APIs fallaron:", backupError);
+                    // Si no hay internet o caen ambas, leemos lo que esté guardado localmente
+                    displayRateForDate(dateKey);
+                    statusMsg.textContent = "Sin conexión a servidores. Mostrando historial local.";
                 }
-            } catch (error) {
-                console.error("Error al obtener datos:", error);
-                // Si falla el fetch, intentamos ver si ya teníamos algo guardado localmente
-                displayRateForDate(dateKey);
             }
         }
 
-        // Función para mostrar la tasa basándose en la fecha seleccionada
+        // Guarda en LocalStorage y actualiza la pantalla
+        function saveAndRender(dateKey, rate, successMessage) {
+            let history = JSON.parse(localStorage.getItem('bcv_history')) || {};
+            
+            // Guardamos el precio del dólar asociado a la fecha
+            history[dateKey] = rate;
+            localStorage.setItem('bcv_history', JSON.stringify(history));
+
+            // Si el usuario no ha cambiado de fecha mientras cargaba, mostramos el resultado
+            if (dateInput.value === dateKey) {
+                renderRate(dateKey, rate, successMessage);
+            }
+        }
+
+        // Muestra la tasa del historial para la fecha seleccionada
         function displayRateForDate(date) {
-            // Formatear la fecha para vista amigable (DD/MM/YYYY)
             const formattedDate = date.split('-').reverse().join('/');
             dateTitle.textContent = `Tasa del: ${formattedDate}`;
 
-            // Obtener el historial guardado en LocalStorage
             const history = JSON.parse(localStorage.getItem('bcv_history')) || {};
 
             if (history[date]) {
-                // Si la fecha existe en nuestra base de datos local
-                renderRate(date, history[date], "Datos recuperados del historial local");
+                renderRate(date, history[date], "Datos recuperados de la memoria local");
             } else {
-                // Si la fecha va hacia atrás y no la guardamos en su momento
                 usdRateDisplay.textContent = "--,-- Bs";
-                statusMsg.textContent = "No hay registros guardados para esta fecha en el historial local.";
+                statusMsg.textContent = "No hay registros previos para esta fecha en este dispositivo.";
             }
         }
 
-        // Helper para actualizar los textos en el HTML
+        // Formatea el número y actualiza el texto final
         function renderRate(date, rate, message) {
             usdRateDisplay.textContent = `${Number(rate).toFixed(2).replace('.', ',')} Bs`;
             statusMsg.textContent = message;
