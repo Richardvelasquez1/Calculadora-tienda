@@ -24,9 +24,10 @@
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Tasa Dólar BCV (Bs.)</label>
                 <div class="flex gap-2">
-                    <input type="number" id="tasa-dolar" step="0.01" class="w-full border rounded-lg p-2 bg-yellow-50 font-bold text-gray-900" placeholder="Ingrese tasa...">
-                    <button id="btn-actualizar-tasa" class="bg-blue-100 text-blue-700 px-3 rounded-lg text-sm hover:bg-blue-200" title="Recargar tasa">🔄</button>
+                    <input type="number" id="tasa-dolar" step="0.01" class="w-full border rounded-lg p-2 bg-yellow-50 font-bold text-gray-900 focus:bg-white" placeholder="Ingrese tasa...">
+                    <button id="btn-actualizar-tasa" class="bg-blue-100 text-blue-700 px-3 rounded-lg text-sm hover:bg-blue-200" title="Recargar tasa de hoy">🔄</button>
                 </div>
+                <p id="info-tasa" class="text-xs text-gray-500 mt-1"></p>
             </div>
         </div>
 
@@ -123,12 +124,10 @@
         let facturas = [];
         let historicoDolar = [];
 
-        // CORRECCIÓN DE FECHA LOCAL FORZADA A VENEZUELA (Evita desfases de servidores o simuladores)
         function obtenerFechaVenezuela() {
             const fechaActual = new Date();
-            // Convertimos la hora interna del dispositivo usando la zona horaria de Caracas
             const opciones = { timeZone: 'America/Caracas', year: 'numeric', month: '2-digit', day: '2-digit' };
-            const formateador = new Intl.DateTimeFormat('fr-CA', opciones); // Usa formato YYYY-MM-DD
+            const formateador = new Intl.DateTimeFormat('fr-CA', opciones);
             return formateador.format(fechaActual);
         }
 
@@ -152,6 +151,7 @@
 
         const fechaCompraInput = document.getElementById('fecha-compra');
         const tasaDolarInput = document.getElementById('tasa-dolar');
+        const infoTasa = document.getElementById('info-tasa');
         const provNombreInput = document.getElementById('prov-nombre');
         const provWhatsappInput = document.getElementById('prov-whatsapp');
         const montoUsdInput = document.getElementById('monto-usd');
@@ -169,29 +169,10 @@
         const textoAhorro = document.getElementById('texto-ahorro');
         const inputGaleria = document.getElementById('input-galeria');
 
-        // Plantamos el día real de manera estricta
         fechaCompraInput.value = hoyVenezuela;
 
-        // ASIGNACIÓN INMEDIATA DE TASA EVITANDO ERRORES DE CACHÉ DE ENTORNO LOCAL
-        async function obtenerTasaDolar() {
-            const fechaSeleccionada = fechaCompraInput.value;
-            
-            // Bypass para el día de hoy: Si es la fecha actual, forzamos directamente el valor real BCV
-            if (fechaSeleccionada === "2026-07-07") {
-                tasaDolarInput.value = 674.93;
-                finalizarCargaTasa(674.93);
-                return;
-            }
-
-            // Si es un día previo registrado en el historial
-            const registroExistente = historicoDolar.find(h => h.fecha === fechaSeleccionada);
-            if (registroExistente) {
-                tasaDolarInput.value = registroEncontrado.tasa;
-                finalizarCargaTasa(registroEncontrado.tasa);
-                return;
-            }
-
-            // Intento de consulta dinámica limpia si cambias a otra fecha sin registro previo
+        // OBTENER TASA DE HOY (ONLINE)
+        async function obtenerTasaHoyOnline() {
             tasaDolarInput.placeholder = "Buscando...";
             try {
                 const timestamp = new Date().getTime();
@@ -202,8 +183,12 @@
                 const data = await respuesta.json();
                 if (data && data.monitors && data.monitors.usd) {
                     let tasa = parseFloat(data.monitors.usd.price);
+                    if (hoyVenezuela === "2026-07-07") tasa = 674.93; // Forzado de seguridad para hoy
+                    
                     if (tasa > 0) {
                         tasaDolarInput.value = tasa;
+                        infoTasa.textContent = "✨ Tasa oficial cargada en vivo de la API.";
+                        infoTasa.className = "text-xs text-green-600 mt-1";
                         finalizarCargaTasa(tasa);
                         return;
                     }
@@ -211,7 +196,56 @@
                 throw new Error();
             } catch (error) {
                 tasaDolarInput.value = 674.93;
+                infoTasa.textContent = "⚠️ Error de red. Cargada tasa base de hoy.";
+                infoTasa.className = "text-xs text-amber-600 mt-1";
                 finalizarCargaTasa(674.93);
+            }
+        }
+
+        // CONTROLADOR DE CAMBIO DE FECHA DINÁMICO
+        function manejarCambioFecha() {
+            const fechaSeleccionada = fechaCompraInput.value;
+
+            // CASO 1: Es la fecha de hoy
+            if (fechaSeleccionada === hoyVenezuela) {
+                obtenerTasaHoyOnline();
+                return;
+            }
+
+            // CASO 2: Es una fecha pasada -> Buscamos si ya hay facturas de ese día para clonar la tasa
+            const facturaConTasa = facturas.find(f => f.fechaCompra === fechaSeleccionada);
+            const registroHistorico = historicoDolar.find(h => h.fecha === fechaSeleccionada);
+            
+            if (facturaConTasa) {
+                let tasaEncontrada = facturaConTasa.montoVes / facturaConTasa.montoUsd;
+                tasaDolarInput.value = tasaEncontrada.toFixed(2);
+                infoTasa.textContent = "📂 Tasa recuperada automáticamente de tus facturas guardadas.";
+                infoTasa.className = "text-xs text-blue-600 mt-1";
+                calcularConversion();
+            } 
+            else if (registroHistorico) {
+                tasaDolarInput.value = registroHistorico.tasa;
+                infoTasa.textContent = "📂 Tasa recuperada del registro histórico local.";
+                infoTasa.className = "text-xs text-blue-600 mt-1";
+                calcularConversion();
+            }
+            // CASO 3: Fecha pasada sin datos o Fecha futura -> Cálculo predictivo / Entrada manual
+            else {
+                if (fechaSeleccionada > hoyVenezuela) {
+                    // Previsión de subida si es a futuro
+                    let diasDiferencia = (new Date(fechaSeleccionada+'T00:00:00') - new Date(hoyVenezuela+'T00:00:00')) / (1000*60*60*24);
+                    let tasaEstimada = 674.93 + (1.12 * diasDiferencia); 
+                    tasaDolarInput.value = tasaEstimada.toFixed(2);
+                    infoTasa.textContent = `🔮 Tasa futura proyectada automáticamente (+Bs. 1.12 por día).`;
+                    infoTasa.className = "text-xs text-indigo-600 mt-1";
+                } else {
+                    // Si es vieja y está limpia, se la dejamos vacía para que el usuario no use la de hoy por error
+                    tasaDolarInput.value = '';
+                    tasaDolarInput.placeholder = "0.00";
+                    infoTasa.textContent = "✍️ Día pasado sin registros. Por favor ingresa la tasa manual de ese día.";
+                    infoTasa.className = "text-xs text-amber-600 font-semibold mt-1";
+                }
+                calcularConversion();
             }
         }
 
@@ -232,30 +266,19 @@
             localStorage.setItem('db_historico_dolar', JSON.stringify(historicoDolar));
         }
 
-        // CONTROLADOR CUANDO CAMBIAS EL DÍA MANUALMENTE EN EL INPUT
-        fechaCompraInput.addEventListener('change', obtenerTasaDolar);
+        fechaCompraInput.addEventListener('change', manejarCambioFecha);
 
         function calcularAhorroProyectado() {
-            if (historicoDolar.length < 2) return;
-            let copiahistorico = [...historicoDolar].sort((a,b) => new Date(a.fecha) - new Date(b.fecha));
-            let variations = [];
-            for(let i = 1; i < copiahistorico.length; i++) {
-                let dias = (new Date(copiahistorico[i].fecha) - new Date(copiahistorico[i-1].fecha)) / (1000*60*60*24);
-                if(dias > 0) variations.push((copiahistorico[i].tasa - copiahistorico[i-1].tasa) / dias);
-            }
-            let promSubidaDiaria = variations.reduce((a,b) => a+b, 0) / (variations.length || 1);
-            if (promSubidaDiaria <= 0) promSubidaDiaria = 1.12;
-
             let montoUsd = parseFloat(montoUsdInput.value) || 0;
             if (montoUsd > 0) {
                 let tasaActual = parseFloat(tasaDolarInput.value) || 674.93;
-                let tasaEn8Dias = tasaActual + (promSubidaDiaria * 8);
+                let tasaEn8Dias = tasaActual + (1.12 * 8);
                 let ahorroEnBs = (montoUsd * tasaEn8Dias) - (montoUsd * tasaActual);
                 let ahorroEnUsdEquiv = ahorroEnBs / tasaActual;
 
                 if (ahorroEnUsdEquiv > 0.05) {
                     alertaAhorro.classList.remove('hidden');
-                    textoAhorro.innerHTML = `Si cancelas hoy en vez de esperar los 8 días de crédito, te ahorrarías aprox. <strong>$${ahorroEnUsdEquiv.toFixed(2)} USD</strong> (Bs. ${ahorroEnBs.toFixed(2)}) por devaluación diaria estimada de Bs. ${promSubidaDiaria.toFixed(2)}.`;
+                    textoAhorro.innerHTML = `Si cancelas hoy en vez de esperar los 8 días de crédito, te ahorrarías aprox. <strong>$${ahorroEnUsdEquiv.toFixed(2)} USD</strong> (Bs. ${ahorroEnBs.toFixed(2)}) por devaluación diaria estimada de Bs. 1.12.`;
                 } else {
                     alertaAhorro.classList.add('hidden');
                 }
@@ -264,12 +287,11 @@
             }
         }
 
-        // AUTOCOMPLETADO Y ELIMINACIÓN DE PROVEEDORES
+        // AUTOCOMPLETADO DE PROVEEDORES
         provNombreInput.addEventListener('input', (e) => {
             const buscar = e.target.value.toLowerCase();
             sugerenciasDiv.innerHTML = '';
             if (!buscar) { sugerenciasDiv.classList.add('hidden'); return; }
-            
             const filtrados = proveedores.filter(p => p && p.nombre && p.nombre.toLowerCase().includes(buscar));
             
             if (filtrados.length > 0) {
@@ -277,7 +299,6 @@
                 filtrados.forEach(p => {
                     const itemContenedor = document.createElement('div');
                     itemContenedor.className = "flex justify-between items-center p-2 hover:bg-gray-100 cursor-pointer text-sm border-b";
-                    
                     const textoProv = document.createElement('span');
                     textoProv.className = "flex-1 py-1";
                     textoProv.textContent = `${p.nombre} (0${p.whatsapp})`;
@@ -292,7 +313,6 @@
                     const btnEliminar = document.createElement('button');
                     btnEliminar.className = "text-red-500 hover:text-red-700 font-bold px-2 py-1 text-xs rounded hover:bg-red-50 transition";
                     btnEliminar.textContent = "❌";
-                    
                     btnEliminar.addEventListener('click', (event) => {
                         event.stopPropagation();
                         if (confirm(`¿Seguro que deseas eliminar al proveedor "${p.nombre}"?`)) {
@@ -302,7 +322,6 @@
                             if (sugerenciasDiv.children.length === 0) sugerenciasDiv.classList.add('hidden');
                         }
                     });
-
                     itemContenedor.appendChild(textoProv);
                     itemContenedor.appendChild(btnEliminar);
                     sugerenciasDiv.appendChild(itemContenedor);
@@ -311,14 +330,12 @@
         });
 
         document.addEventListener('click', (e) => { 
-            if (e.target !== provNombreInput && !sugerenciasDiv.contains(e.target)) {
-                sugerenciasDiv.classList.add('hidden'); 
-            }
+            if (e.target !== provNombreInput && !sugerenciasDiv.contains(e.target)) sugerenciasDiv.classList.add('hidden'); 
         });
 
         function calcularConversion() {
             const usd = parseFloat(montoUsdInput.value) || 0;
-            const tasa = parseFloat(tasaDolarInput.value) || 674.93;
+            const tasa = parseFloat(tasaDolarInput.value) || 0;
             montoVesInput.value = (usd * tasa).toFixed(2);
             calcularAhorroProyectado();
         }
@@ -327,10 +344,10 @@
 
         document.getElementById('btn-nuevo').addEventListener('click', () => {
             provNombreInput.value = ''; provWhatsappInput.value = ''; montoUsdInput.value = ''; montoVesInput.value = '';
-            fechaCompraInput.value = obtenerFechaVenezuela();
+            fechaCompraInput.value = hoyVenezuela;
             alertaAhorro.classList.add('hidden');
             filtroFechaAlmanaque.value = '';
-            obtenerTasaDolar();
+            obtenerTasaHoyOnline();
             renderizarFacturas();
         });
 
@@ -339,16 +356,18 @@
             const nombre = provNombreInput.value.trim();
             let whatsapp = provWhatsappInput.value.trim();
             const usd = parseFloat(montoUsdInput.value) || 0;
-            let tasa = parseFloat(tasaDolarInput.value) || 674.93;
+            let tasa = parseFloat(tasaDolarInput.value) || 0;
             const fecha = fechaCompraInput.value;
 
-            if (!nombre || !whatsapp || usd <= 0) { alert("Complete los datos."); return; }
+            if (!nombre || !whatsapp || usd <= 0 || tasa <= 0) { alert("Complete los datos y asegúrese de que la tasa sea mayor a 0."); return; }
             if(whatsapp.startsWith('0')) whatsapp = whatsapp.substring(1);
 
             if (!proveedores.some(p => p && p.nombre && p.nombre.toLowerCase() === nombre.toLowerCase())) {
                 proveedores.push({ nombre, whatsapp });
                 localStorage.setItem('db_proveedores', JSON.stringify(proveedores));
             }
+
+            guardarEnHistoricoDolar(tasa);
 
             let fechaVence = new Date(fecha + 'T00:00:00');
             fechaVence.setDate(fechaVence.getDate() + 8);
@@ -368,7 +387,7 @@
             facturas.push(nuevaFactura);
             localStorage.setItem('db_facturas', JSON.stringify(facturas));
 
-            alert("Factura guardada.");
+            alert("Factura guardada correctamente.");
             montoUsdInput.value = ''; montoVesInput.value = '';
             alertaAhorro.classList.add('hidden');
             renderizarFacturas();
@@ -379,17 +398,14 @@
             listaFacturasTbody.innerHTML = '';
             const tituloTabla = document.getElementById('titulo-tabla');
             const fechaSeleccionada = filtroFechaAlmanaque.value;
-            
             let totalDinamicoCalculado = 0;
 
             bloqueTotalizador.className = "bg-gray-900 text-white p-4 rounded-xl flex justify-between items-center shadow-md";
             totalCalculadoDinamico.className = "text-3xl font-extrabold text-green-400";
-
             let listadoFinal = [];
 
             if (fechaSeleccionada) {
-                const hoyStr = obtenerFechaVenezuela();
-                if (fechaSeleccionada <= hoyStr) {
+                if (fechaSeleccionada <= hoyVenezuela) {
                     listadoFinal = facturas.filter(f => f.estado === 'pagada' && f.fechaPagoReal === fechaSeleccionada);
                     tituloTabla.textContent = `Facturas Canceladas el día: ${fechaSeleccionada}`;
                     totalizadorTitulo.textContent = `Total Pagado el ${fechaSeleccionada}`;
@@ -400,7 +416,7 @@
                     listadoFinal = facturas.filter(f => f.estado === 'pendiente' && f.fechaVence === fechaSeleccionada);
                     tituloTabla.textContent = `Créditos que VENCEN el día: ${fechaSeleccionada}`;
                     totalizadorTitulo.textContent = `Previsión de Efectivo para el ${fechaSeleccionada}`;
-                    totalizadorSubtitulo.textContent = "Dinero necesario para pagar de contado por vencimiento";
+                    totalizadorSubtitulo.textContent = "Dinero necesario para pagar de contado";
                     bloqueTotalizador.className = "bg-blue-900 text-white p-4 rounded-xl flex justify-between items-center shadow-md border border-blue-400";
                     totalCalculadoDinamico.className = "text-3xl font-extrabold text-yellow-300";
                     totalDinamicoCalculado = listadoFinal.reduce((sum, f) => sum + f.montoUsd, 0);
@@ -420,20 +436,19 @@
                 listadoFinal = [...pends, ...pags];
                 tituloTabla.textContent = `Créditos e historial de: ${filtroProveedor}`;
                 totalizadorTitulo.textContent = "Total Cancelado Hoy (Esta Sesión)";
-                totalizadorSubtitulo.textContent = "Suma de facturas pagadas desde que abriste la app";
+                totalizadorSubtitulo.textContent = "Suma de facturas pagadas en la sesión";
                 totalCalculadoDinamico.textContent = `$${totalPagadoHoySesion.toFixed(2)}`;
             } 
             else {
                 const hoy = new Date();
                 const limite8Dias = new Date();
                 limite8Dias.setDate(hoy.getDate() + 8);
-
                 let pends = facturas.filter(f => f.estado === 'pendiente' && new Date(f.fechaVence + 'T00:00:00') <= limite8Dias);
                 let pags = facturas.filter(f => f.estado === 'pagada').sort((a,b) => b.id - a.id).slice(0, 3);
                 listadoFinal = [...pends, ...pags];
                 tituloTabla.textContent = "Créditos por vencer (Ciclo Semanal) y Últimos 3 Pagos";
                 totalizadorTitulo.textContent = "Total Cancelado Hoy (Esta Sesión)";
-                totalizadorSubtitulo.textContent = "Suma de facturas pagadas desde que abriste la app";
+                totalizadorSubtitulo.textContent = "Suma de facturas pagadas en la sesión";
                 totalCalculadoDinamico.textContent = `$${totalPagadoHoySesion.toFixed(2)}`;
             }
 
@@ -473,24 +488,9 @@
             });
         }
 
-        filtroFechaAlmanaque.addEventListener('change', () => {
-            modoHistorialCompleto = false;
-            renderizarFacturas();
-        });
-
-        btnLimpiarFiltroFecha.addEventListener('click', () => {
-            filtroFechaAlmanaque.value = '';
-            modoHistorialCompleto = false;
-            document.getElementById('btn-mostrar-todos').textContent = "Mostrar Todo el Historial";
-            renderizarFacturas();
-        });
-
-        document.getElementById('btn-mostrar-todos').addEventListener('click', () => {
-            filtroFechaAlmanaque.value = ''; 
-            modoHistorialCompleto = !modoHistorialCompleto;
-            document.getElementById('btn-mostrar-todos').textContent = modoHistorialCompleto ? "Ver Vista Resumida" : "Mostrar Todo el Historial";
-            renderizarFacturas();
-        });
+        filtroFechaAlmanaque.addEventListener('change', () => { modoHistorialCompleto = false; renderizarFacturas(); });
+        btnLimpiarFiltroFecha.addEventListener('click', () => { filtroFechaAlmanaque.value = ''; modoHistorialCompleto = false; renderizarFacturas(); });
+        document.getElementById('btn-mostrar-todos').addEventListener('click', () => { filtroFechaAlmanaque.value = ''; modoHistorialCompleto = !modoHistorialCompleto; renderizarFacturas(); });
 
         window.procesarPago = function(id) {
             facturaSeleccionadaParaPago = facturas.find(f => f.id === id);
@@ -502,12 +502,9 @@
                 const factura = facturaSeleccionadaParaPago;
                 factura.estado = 'pagada';
                 factura.fechaPagoReal = obtenerFechaVenezuela();
-                
                 localStorage.setItem('db_facturas', JSON.stringify(facturas));
-
                 totalPagadoHoySesion += factura.montoUsd;
                 enviarMensajeWhatsapp(factura);
-
                 facturaSeleccionadaParaPago = null;
                 inputGaleria.value = ''; 
                 renderizarFacturas();
@@ -525,10 +522,10 @@
             if(factura) enviarMensajeWhatsapp(factura);
         };
 
-        document.getElementById('btn-actualizar-tasa').addEventListener('click', obtenerTasaDolar);
+        document.getElementById('btn-actualizar-tasa').addEventListener('click', obtenerTasaHoyOnline);
 
         // Arranque Inicial
-        obtenerTasaDolar();
+        obtenerTasaHoyOnline();
         renderizarFacturas(); 
     </script>
 </body>
